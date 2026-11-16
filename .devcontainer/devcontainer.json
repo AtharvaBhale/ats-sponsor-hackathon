@@ -1,0 +1,14 @@
+{
+  "name": "ats-sponsor-hackathon",
+  "image": "mcr.microsoft.com/devcontainers/python:3.11",
+  "postCreateCommand": "bash scripts/setup.sh",
+  "forwardPorts": [8000, 11434],
+  "portsAttributes": {
+    "8000": { "label": "App", "onAutoForward": "openBrowser" },
+    "11434": { "label": "Ollama (internal)" }
+  },
+  "customizations": {
+    "vscode": { "extensions": ["ms-python.python"] }
+  },
+  "hostRequirements": { "cpus": 2, "memory": "8gb" }
+}

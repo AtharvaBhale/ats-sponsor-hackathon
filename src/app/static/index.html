@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>LaTeX Resume Editor</title>
+<style>
+  body{margin:0;font-family:system-ui,sans-serif;display:flex;flex-direction:column;height:100vh}
+  header{padding:8px 12px;border-bottom:1px solid #ccc;display:flex;gap:8px;align-items:center}
+  main{flex:1;display:flex;min-height:0}
+  textarea{flex:1;font-family:monospace;font-size:13px;border:0;border-right:1px solid #ccc;padding:8px;resize:none}
+  iframe{flex:1;border:0}
+  #status{color:#666;font-size:13px}
+</style></head><body>
+<header><strong>Resume editor</strong><button id="go">Compile</button><span id="status"></span></header>
+<main><textarea id="src" spellcheck="false"></textarea><iframe id="pdf"></iframe></main>
+<script>
+const src=document.getElementById('src'),pdf=document.getElementById('pdf'),st=document.getElementById('status');
+let t;
+async function compile(){
+  st.textContent='Compiling...';
+  const r=await fetch('/api/compile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({source:src.value})});
+  if(!r.ok){st.textContent='Error: '+(await r.json()).detail;return}
+  pdf.src=URL.createObjectURL(await r.blob());st.textContent='Compiled';
+}
+src.addEventListener('input',()=>{clearTimeout(t);t=setTimeout(compile,1500)});
+document.getElementById('go').onclick=compile;
+fetch('/static/resume.tex').then(r=>r.text()).then(x=>{src.value=x;compile()});
+</script></body></html>
