@@ -6,12 +6,13 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import gap, guard, latex, llm
+from .routes_staffing import router as staffing_router
+from .routes_jobs import router as jobs_router
 from .skills import extract_skills
 
-from .routes_staffing import router as staffing_router
-app.include_router(staffing_router)   # place right after app = FastAPI(...)
-
 app = FastAPI(title="ATS + Sponsorship Career Platform")
+app.include_router(staffing_router)
+app.include_router(jobs_router)
 STATIC = Path(__file__).parent / "static"
 
 
