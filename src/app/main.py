@@ -5,7 +5,11 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import latex, llm
+from . import gap, guard, latex, llm
+from .skills import extract_skills
+
+from .routes_staffing import router as staffing_router
+app.include_router(staffing_router)   # place right after app = FastAPI(...)
 
 app = FastAPI(title="ATS + Sponsorship Career Platform")
 STATIC = Path(__file__).parent / "static"
@@ -18,6 +22,12 @@ class CompileReq(BaseModel):
 class RewriteReq(BaseModel):
     bullet: str
     job_description: str = ""
+    evidence: str = ""  # original resume text + user-confirmed additions + parsed uploads
+
+
+class AnalyzeReq(BaseModel):
+    resume_text: str
+    job_description: str
 
 
 @app.get("/health")
@@ -33,13 +43,28 @@ def compile_tex(req: CompileReq):
         raise HTTPException(400, str(e))
 
 
+@app.post("/api/analyze")
+def analyze(req: AnalyzeReq):
+    return gap.analyze(req.resume_text, req.job_description)
+
+
 @app.post("/api/rewrite")
 async def rewrite(req: RewriteReq):
-    # TODO: add evidence check (anti-fabrication) before returning
-    system = ("You rewrite resume bullets for ATS keyword fit. Never add facts, "
-              "employers, degrees, tools or numbers not present in the input bullet.")
-    prompt = f"Job description:\n{req.job_description}\n\nBullet:\n{req.bullet}\n\nRewritten bullet:"
-    return {"rewritten": await llm.generate(prompt, system)}
+    evidence = req.evidence or req.bullet
+    # Only keywords the candidate already has evidence for may be used in the rewrite.
+    allowed = sorted(extract_skills(req.job_description) & extract_skills(evidence))
+    system = ("You rewrite one resume bullet for ATS keyword fit. Use only facts in the input "
+              "bullet. Never add employers, degrees, certifications, tools or numbers.")
+    prompt = (f"Keywords you may emphasize if truthful: {', '.join(allowed) or 'none'}\n"
+              f"Bullet:\n{req.bullet}\n\nRewritten bullet:")
+    candidate = await llm.generate(prompt, system)
+    result = guard.check(candidate, evidence)
+    return {
+        "original": req.bullet,
+        "rewritten": candidate if result.ok else req.bullet,  # fall back to the truth
+        "accepted": result.ok,
+        "violations": result.violations,
+    }
 
 
 @app.get("/")
