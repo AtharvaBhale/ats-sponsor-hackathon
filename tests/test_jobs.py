@@ -9,8 +9,6 @@ from src.app import jobs, jobs_store, routes_jobs, urlsafe
 from src.app.htmltext import html_to_text
 from src.app.main import app
 
-from .routes_jobs import router as jobs_router
-app.include_router(jobs_router)
 
 def public_resolver(host, port, type=0):
     return [(2, 1, 6, "", ("93.184.216.34", port))]
@@ -242,3 +240,18 @@ def test_hide_staffing_filter(api):
     assert [j["url"] for j in kept] == ["u2"]
     kept = api.get("/api/jobs?direct_hire_only=true").json()
     assert [j["url"] for j in kept] == ["u2"]
+
+
+def test_lever_ok_false_body_with_http_200_is_closed():
+    c = client_for(lambda r: httpx.Response(200, json={"ok": False, "error": "Document not found"}))
+    assert jobs.verify(LEVER_URL, c, public_resolver, NOW).status == "closed"
+
+
+def test_empty_api_payload_never_live():
+    c = client_for(lambda r: httpx.Response(200, json={}))
+    assert jobs.verify(GH_URL, c, public_resolver, NOW).status == "unconfirmed"
+
+
+def test_greenhouse_url_with_gh_jid_query_is_detected():
+    p = jobs.detect_portal("https://job-boards.greenhouse.io/greenhouse/jobs/8279752?gh_jid=8279752")
+    assert (p.kind, p.company, p.job_id) == ("greenhouse", "greenhouse", "8279752")

@@ -131,9 +131,18 @@ def verify(url: str, client=None, resolver=None, now: datetime | None = None) ->
         if r.status == 200:
             try:
                 data = json.loads(r.text)
+                if isinstance(data, dict) and data.get("ok") is False:
+                    if "not found" in str(data.get("error", "")).lower():
+                        v.status, v.reason = "closed", f"{portal.kind} API says the posting was not found"
+                    else:
+                        v.status, v.reason = "unconfirmed", f"{portal.kind} API returned an error body"
+                    return v
                 info = (_greenhouse if portal.kind == "greenhouse" else _lever)(data, portal, now)
             except (ValueError, AttributeError, TypeError):
                 v.status, v.reason = "unconfirmed", "Portal API returned unreadable data"
+                return v
+            if not info["title"]:
+                v.status, v.reason = "unconfirmed", "Portal API response had no job title; cannot confirm"
                 return v
             v.status, v.reason = "live", f"Confirmed open via {portal.kind} API"
             v.title, v.company, v.location = info["title"], info["company"], info["location"]
