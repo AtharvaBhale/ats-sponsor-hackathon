@@ -9,6 +9,8 @@ from src.app import jobs, jobs_store, routes_jobs, urlsafe
 from src.app.htmltext import html_to_text
 from src.app.main import app
 
+from .routes_jobs import router as jobs_router
+app.include_router(jobs_router)
 
 def public_resolver(host, port, type=0):
     return [(2, 1, 6, "", ("93.184.216.34", port))]
