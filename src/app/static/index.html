@@ -20,7 +20,7 @@ iframe{width:100%;height:100%;border:0}#st{color:var(--mut);font-size:12px}
 </style></head><body>
 <header><strong>ATS Resume Tailor</strong>
 <button id="tailor" class="p">Tailor resume</button><button id="revert">Revert</button>
-<button id="compile">Compile</button><button id="dl">Download .tex</button><span id="st"></span></header>
+<button id="up">Upload resume</button><input type="file" id="resfile" hidden accept=".pdf,.docx,.txt,.md,.tex"><button id="compile">Compile</button><select id="fmt"><option value="pdf">PDF</option><option value="txt">Plain text</option><option value="md">Markdown</option><option value="tex">LaTeX</option></select><button id="exp">Export</button><span id="st"></span></header>
 <main>
 <section>
   <h3>1. Job</h3>
@@ -28,6 +28,9 @@ iframe{width:100%;height:100%;border:0}#st{color:var(--mut);font-size:12px}
   <button id="fetch" style="margin:6px 0">Fetch &amp; verify</button>
   <div id="badges"></div>
   <textarea id="jd" rows="7" placeholder="Job description text"></textarea>
+  <h3>Evidence (transcripts, certificates)</h3>
+  <button id="evbtn">Upload document</button><input type="file" id="evfile" hidden accept=".pdf,.docx,.txt,.md">
+  <textarea id="ev" rows="4" placeholder="Facts you can vouch for, one per line. Uploads are screened for relevance; IDs are dropped."></textarea>
   <h3>2. Gaps</h3><div id="gaps" class="mut">Run "Tailor resume" to see gaps.</div>
   <h3>3. Bullet changes</h3><div id="bullets" class="mut">Nothing yet.</div>
 </section>
@@ -59,13 +62,13 @@ $('fetch').onclick=async()=>{try{st('Verifying...');$('badges').replaceChildren(
   if(r.staffing&&r.staffing.badge)r.staffing.badge.risks.forEach(x=>$('badges').append(el('div','• '+x,'mut')));
   if(r.jd_text)$('jd').value=r.jd_text;st('Job loaded')}catch(e){st('Job error: '+e.message)}};
 
-function answers(){return [...document.querySelectorAll('#gaps textarea')].map(t=>t.value.trim()).filter(Boolean)}
+function answers(){return [...document.querySelectorAll('#gaps textarea'),$('ev')].flatMap(t=>t.value.split('\n')).map(x=>x.trim()).filter(Boolean)}
 function render(r){const g=$('gaps');g.replaceChildren();const a=r.gap;
   g.append(el('div','Required coverage: '+(a.required_coverage==null?'n/a':Math.round(a.required_coverage*100)+'%')+(a.years_requested?' · '+a.years_requested+'+ yrs requested':''),'mut'));
   if(a.matched_required.length)g.append(el('div','Evidenced: '+a.matched_required.join(', '),'ok'));
   if(!a.missing_required.length)g.append(el('div','No missing required skills.','ok'));
   a.missing_required.forEach((s,i)=>{const c=el('div',null,'card');c.append(el('div',a.questions[i],'warn'));
-    const t=el('textarea');t.rows=2;t.placeholder='Real project, coursework or experience (leave blank if none)';c.append(t);g.append(c)});
+    const t=el('textarea');t.rows=2;t.placeholder='Real project, coursework or experience (leave blank if none)';c.append(t);const d=el('button','Draft bullet from this');const out=el('div');d.onclick=()=>draft(t.value,s,out);c.append(d,out);g.append(c)});
   if(a.missing_required.length){const b=el('button','Re-run with my answers');b.onclick=tailor;g.append(b)}
   const bl=$('bullets');bl.replaceChildren();const s=r.summary;
   bl.append(el('div',s.accepted+' accepted · '+s.rejected+' blocked by the truthfulness guard','mut'));
@@ -81,7 +84,24 @@ async function tailor(){try{if(orig===null)orig=$('src').value;st('Tailoring (lo
 $('tailor').onclick=tailor;
 $('revert').onclick=()=>{if(orig!==null){$('src').value=orig;orig=null;compile()}};
 $('compile').onclick=compile;
-$('dl').onclick=()=>{const a=el('a');a.href=URL.createObjectURL(new Blob([$('src').value],{type:'text/plain'}));a.download='resume.tex';a.click()};
 $('src').addEventListener('input',()=>{clearTimeout(timer);timer=setTimeout(compile,1500)});
+async function draft(ev,skill,out){out.replaceChildren();try{const r=await post('/api/synthesize',{evidence:ev,skill});
+  out.append(el('div',r.bullet,r.accepted?'ok':'bad'));
+  if(!r.accepted){out.append(el('div','Blocked: '+r.violations.join('; '),'bad'));return}
+  const b=el('button','Add to resume under Projects');b.onclick=async()=>{
+    const add=async t=>(await post('/api/resume/add-bullet',{tex:t,bullet:r.bullet,section:'Projects'})).tex;
+    if(orig!==null)orig=await add(orig);$('src').value=await add($('src').value);compile();b.remove();out.append(el('div','Added.','ok'))};
+  out.append(b)}catch(e){out.append(el('div',e.message,'bad'))}}
+async function upload(url,file,extra){const f=new FormData();f.append('file',file);for(const k in extra||{})f.append(k,extra[k]);
+  const r=await fetch(url,{method:'POST',body:f});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.detail||r.statusText);return j}
+$('up').onclick=()=>$('resfile').click();
+$('resfile').onchange=async e=>{try{st('Reading resume...');const r=await upload('/api/resume/upload',e.target.files[0]);
+  orig=null;$('src').value=r.latex;st((r.warnings||[]).join(' ')||'Resume loaded. Review the LaTeX, then Tailor.');compile()}catch(x){st('Upload error: '+x.message)}e.target.value=''};
+$('evbtn').onclick=()=>$('evfile').click();
+$('evfile').onchange=async e=>{try{st('Screening document...');const r=await upload('/api/evidence/upload',e.target.files[0],{job_description:$('jd').value});
+  $('ev').value=($('ev').value?$('ev').value+'\n':'')+r.kept.join('\n');
+  st('Kept '+r.kept.length+' relevant lines; dropped '+r.dropped_irrelevant+' irrelevant and '+r.dropped_personal_ids+' personal-ID lines. Review before tailoring.')}catch(x){st('Upload error: '+x.message)}e.target.value=''};
+$('exp').onclick=async()=>{try{const f=$('fmt').value;const r=await fetch('/api/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tex:$('src').value,format:f})});
+  if(!r.ok)throw new Error((await r.json()).detail);const a=el('a');a.href=URL.createObjectURL(await r.blob());a.download='resume.'+f;a.click()}catch(x){st('Export error: '+x.message)}};
 fetch('/static/resume.tex').then(r=>r.text()).then(x=>{$('src').value=x;compile()});
 </script></body></html>

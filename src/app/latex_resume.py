@@ -32,3 +32,18 @@ def replace_bullets(tex: str, new_text: dict) -> str:
         s, e, _ = spans[i]
         tex = tex[:s] + escape(new_text[i]) + tex[e:]
     return tex
+
+
+def insert_bullet(tex: str, text: str, section: str = "Projects") -> str:
+    """Add an \\item under the named section (creating it if absent)."""
+    item = "  \\item " + escape(text) + "\n"
+    m = re.search(r"\\section\*?\{[^}]*" + re.escape(section) + r"[^}]*\}", tex, re.I)
+    if m:
+        end = tex.find("\\end{itemize}", m.end())
+        nxt = re.search(r"\\section", tex[m.end():])
+        if end != -1 and (not nxt or end < m.end() + nxt.start()):
+            return tex[:end] + item + tex[end:]
+        return tex[:m.end()] + "\n\\begin{itemize}\n" + item + "\\end{itemize}" + tex[m.end():]
+    block = "\\section*{" + section + "}\n\\begin{itemize}\n" + item + "\\end{itemize}\n"
+    i = tex.rfind("\\end{document}")
+    return tex[:i] + block + tex[i:] if i != -1 else tex + "\n" + block
