@@ -28,21 +28,28 @@ def validate(source: str) -> None:
             raise LatexError(f"Blocked LaTeX construct: {pat}")
 
 
+def _engine():
+    """tectonic if present, else pdflatex with shell-escape disabled."""
+    if shutil.which("tectonic"):
+        return ["tectonic", "--chatter", "minimal", "resume.tex"]
+    if shutil.which("pdflatex"):
+        return ["pdflatex", "-no-shell-escape", "-interaction=nonstopmode", "-halt-on-error", "resume.tex"]
+    return None
+
+
 def compile_pdf(source: str) -> bytes:
     validate(source)
-    if not shutil.which("tectonic"):
-        raise LatexError("tectonic is not installed (see scripts/setup.sh)")
+    cmd = _engine()
+    if cmd is None:
+        raise LatexError("No LaTeX engine found: install tectonic or TeX Live (see scripts/setup.sh)")
     with tempfile.TemporaryDirectory() as d:
         tex = Path(d) / "resume.tex"
         tex.write_text(source, encoding="utf-8")
         try:
-            proc = subprocess.run(
-                ["tectonic", "--chatter", "minimal", "resume.tex"],
-                cwd=d, capture_output=True, text=True, timeout=TIMEOUT_S,
-            )
+            proc = subprocess.run(cmd, cwd=d, capture_output=True, text=True, timeout=TIMEOUT_S)
         except subprocess.TimeoutExpired:
             raise LatexError("Compile timed out")
         pdf = Path(d) / "resume.pdf"
         if proc.returncode != 0 or not pdf.exists():
-            raise LatexError(proc.stderr[-1500:] or "Compile failed")
+            raise LatexError((proc.stderr or proc.stdout)[-1500:] or "Compile failed")
         return pdf.read_bytes()
