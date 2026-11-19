@@ -103,5 +103,5 @@ $('evfile').onchange=async e=>{try{st('Screening document...');const r=await upl
   st('Kept '+r.kept.length+' relevant lines; dropped '+r.dropped_irrelevant+' irrelevant and '+r.dropped_personal_ids+' personal-ID lines. Review before tailoring.')}catch(x){st('Upload error: '+x.message)}e.target.value=''};
 $('exp').onclick=async()=>{try{const f=$('fmt').value;const r=await fetch('/api/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tex:$('src').value,format:f})});
   if(!r.ok)throw new Error((await r.json()).detail);const a=el('a');a.href=URL.createObjectURL(await r.blob());a.download='resume.'+f;a.click()}catch(x){st('Export error: '+x.message)}};
-fetch('/static/resume.tex').then(r=>r.text()).then(x=>{$('src').value=x;compile()});
+fetch('/api/sample-resume').then(r=>{if(!r.ok)throw new Error('sample resume missing');return r.text()}).then(x=>{$('src').value=x;compile()}).catch(e=>st(e.message+'. Use Upload resume.'));
 </script></body></html>

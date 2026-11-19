@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import httpx
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
@@ -87,3 +89,13 @@ def export(req: ExportReq):
     else:
         raise HTTPException(400, "format must be txt, md, pdf or tex")
     return Response(data, media_type=mt, headers={"Content-Disposition": f'attachment; filename="resume.{f}"'})
+
+
+SAMPLE = Path(__file__).resolve().parents[2] / "templates" / "resume.tex"
+
+
+@router.get("/sample-resume")
+def sample_resume():
+    if not SAMPLE.exists():
+        raise HTTPException(404, "templates/resume.tex is missing from the repo")
+    return Response(SAMPLE.read_text(encoding="utf-8"), media_type="text/plain; charset=utf-8")

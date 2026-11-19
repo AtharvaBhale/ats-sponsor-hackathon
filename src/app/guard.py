@@ -45,11 +45,20 @@ def check(rewritten: str, evidence: str) -> GuardResult:
         v.append("certification claim not in evidence")
 
     ev_words = _words(evidence)
+    ev_skills = extract_skills(evidence)
     for i, m in enumerate(_PROPER.finditer(rewritten)):
         tok = m.group(0)
         if i == 0 or tok in _STOP:  # sentence-initial verb or stopword
             continue
-        if tok.lower() not in ev_words:
-            v.append(f"new proper noun not in evidence: {tok}")
+        low = tok.lower()
+        if low in ev_words:
+            continue
+        sk = extract_skills(tok)
+        if sk and sk <= ev_skills:  # e.g. "RESTful" when the evidence says "REST"
+            continue
+        if len(low) >= 4 and any(len(w) >= 4 and (low.startswith(w) or w.startswith(low))
+                                 and abs(len(low) - len(w)) <= 4 for w in ev_words):
+            continue  # inflection of an evidence word, not a new name
+        v.append(f"new proper noun not in evidence: {tok}")
 
     return GuardResult(ok=not v, violations=sorted(set(v)))

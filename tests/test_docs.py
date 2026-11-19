@@ -120,3 +120,8 @@ def test_api_add_bullet_and_export(client):
     r = client.post("/api/export", json={"tex": TEX, "format": "md"})
     assert r.status_code == 200 and "resume.md" in r.headers["content-disposition"] and r.text.startswith("# Jordan")
     assert client.post("/api/export", json={"tex": TEX, "format": "exe"}).status_code == 400
+
+
+def test_sample_resume_route_serves_valid_latex(client):
+    r = client.get("/api/sample-resume")
+    assert r.status_code == 200 and r.text.startswith("\\documentclass")

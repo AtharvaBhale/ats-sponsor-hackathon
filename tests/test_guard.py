@@ -37,3 +37,14 @@ def test_invented_certification_rejected():
 def test_user_confirmed_addition_is_allowed():
     r = check("Built a Kubernetes-deployed Python REST API.", EVIDENCE + " Course project: deployed on Kubernetes.")
     assert r.ok, r.violations
+
+
+def test_inflection_of_evidence_word_is_not_a_new_name():
+    ev = "Built a REST API in Python for an internal inventory tool."
+    assert check("Built a RESTful API in Python for an internal inventory tool.", ev).ok
+
+
+def test_invented_company_near_an_evidence_word_still_blocked():
+    ev = "Built a REST API in Python at Acme."
+    r = check("Built a REST API in Python at Acmeville Industries.", ev)
+    assert any("Acmeville" in x for x in r.violations)
