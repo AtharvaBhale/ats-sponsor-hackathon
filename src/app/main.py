@@ -8,11 +8,15 @@ from pydantic import BaseModel
 from . import gap, guard, latex, llm
 from .routes_staffing import router as staffing_router
 from .routes_jobs import router as jobs_router
+from .routes_sponsorship import router as sponsorship_router
+from .routes_tailor import router as tailor_router
 from .skills import extract_skills
 
 app = FastAPI(title="ATS + Sponsorship Career Platform")
 app.include_router(staffing_router)
 app.include_router(jobs_router)
+app.include_router(sponsorship_router)
+app.include_router(tailor_router)
 STATIC = Path(__file__).parent / "static"
 
 

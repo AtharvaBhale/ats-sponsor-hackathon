@@ -1,25 +1,87 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>LaTeX Resume Editor</title>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Career Platform: ATS Resume Tailor</title>
 <style>
-  body{margin:0;font-family:system-ui,sans-serif;display:flex;flex-direction:column;height:100vh}
-  header{padding:8px 12px;border-bottom:1px solid #ccc;display:flex;gap:8px;align-items:center}
-  main{flex:1;display:flex;min-height:0}
-  textarea{flex:1;font-family:monospace;font-size:13px;border:0;border-right:1px solid #ccc;padding:8px;resize:none}
-  iframe{flex:1;border:0}
-  #status{color:#666;font-size:13px}
+:root{--bg:#fff;--fg:#1a1a1a;--mut:#666;--line:#d8d8d8;--ok:#1a7f37;--bad:#b42318;--warn:#9a6700;--card:#f6f6f6}
+@media(prefers-color-scheme:dark){:root{--bg:#161616;--fg:#eee;--mut:#9a9a9a;--line:#333;--ok:#3fb950;--bad:#f85149;--warn:#d29922;--card:#202020}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px system-ui,sans-serif;height:100vh;display:flex;flex-direction:column}
+header{padding:8px 12px;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+main{flex:1;display:grid;grid-template-columns:340px 1fr 1fr;min-height:0}
+section{border-right:1px solid var(--line);overflow:auto;padding:10px;min-height:0}
+textarea,input{width:100%;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:6px;font:inherit}
+#src{height:100%;border:0;border-radius:0;font:12px monospace;resize:none}
+button{padding:5px 10px;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:6px;cursor:pointer}
+button.p{background:var(--fg);color:var(--bg)}h3{margin:12px 0 6px;font-size:13px;text-transform:uppercase;color:var(--mut)}
+.b{display:inline-block;padding:2px 8px;border-radius:10px;border:1px solid var(--line);margin:2px;font-size:12px}
+.ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}.mut{color:var(--mut)}
+.card{background:var(--card);border-radius:6px;padding:8px;margin:6px 0}del{color:var(--bad)}ins{color:var(--ok);text-decoration:none}
+iframe{width:100%;height:100%;border:0}#st{color:var(--mut);font-size:12px}
+@media(max-width:900px){main{grid-template-columns:1fr}body{height:auto}}
 </style></head><body>
-<header><strong>Resume editor</strong><button id="go">Compile</button><span id="status"></span></header>
-<main><textarea id="src" spellcheck="false"></textarea><iframe id="pdf"></iframe></main>
+<header><strong>ATS Resume Tailor</strong>
+<button id="tailor" class="p">Tailor resume</button><button id="revert">Revert</button>
+<button id="compile">Compile</button><button id="dl">Download .tex</button><span id="st"></span></header>
+<main>
+<section>
+  <h3>1. Job</h3>
+  <input id="url" placeholder="Greenhouse / Lever job URL (or paste text below)">
+  <button id="fetch" style="margin:6px 0">Fetch &amp; verify</button>
+  <div id="badges"></div>
+  <textarea id="jd" rows="7" placeholder="Job description text"></textarea>
+  <h3>2. Gaps</h3><div id="gaps" class="mut">Run "Tailor resume" to see gaps.</div>
+  <h3>3. Bullet changes</h3><div id="bullets" class="mut">Nothing yet.</div>
+</section>
+<section style="padding:0"><textarea id="src" spellcheck="false"></textarea></section>
+<section style="padding:0;border:0"><iframe id="pdf" title="PDF preview"></iframe></section>
+</main>
 <script>
-const src=document.getElementById('src'),pdf=document.getElementById('pdf'),st=document.getElementById('status');
-let t;
-async function compile(){
-  st.textContent='Compiling...';
-  const r=await fetch('/api/compile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({source:src.value})});
-  if(!r.ok){st.textContent='Error: '+(await r.json()).detail;return}
-  pdf.src=URL.createObjectURL(await r.blob());st.textContent='Compiled';
-}
-src.addEventListener('input',()=>{clearTimeout(t);t=setTimeout(compile,1500)});
-document.getElementById('go').onclick=compile;
-fetch('/static/resume.tex').then(r=>r.text()).then(x=>{src.value=x;compile()});
+const $=id=>document.getElementById(id);
+const el=(t,txt,cls)=>{const e=document.createElement(t);if(txt!=null)e.textContent=txt;if(cls)e.className=cls;return e};
+const post=async(u,b)=>{const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
+  const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.detail||r.statusText);return j};
+const st=m=>$('st').textContent=m;let orig=null,timer;
+
+async function compile(){st('Compiling...');
+  const r=await fetch('/api/compile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({source:$('src').value})});
+  if(!r.ok){st('LaTeX error: '+((await r.json()).detail||'').slice(0,160));return}
+  $('pdf').src=URL.createObjectURL(await r.blob());st('Compiled')}
+
+function badge(txt,cls){$('badges').append(el('span',txt,'b '+(cls||'')))}
+$('fetch').onclick=async()=>{try{st('Verifying...');$('badges').replaceChildren();
+  const url=$('url').value.trim(),text=$('jd').value.trim();
+  const r=await post('/api/jobs/ingest',url?{url,text:text||null}:{text});
+  if(r.verification){const s=r.verification.status;badge('Status: '+s,s==='live'?'ok':s==='closed'?'bad':'warn')}
+  if(r.title)badge(r.title+(r.company?' @ '+r.company:''));
+  if(r.sponsorship)badge('Sponsorship: '+r.sponsorship.effective_tier+' ('+r.sponsorship.confidence+' confidence)',r.sponsorship.tier==='Proven Sponsor'?'ok':'warn');
+  if(r.staffing&&r.staffing.badge)badge(r.staffing.badge.title,'warn');
+  (r.warnings||[]).forEach(w=>$('badges').append(el('div',w,'warn')));
+  if(r.verification)$('badges').append(el('div',r.verification.reason,'mut'));
+  if(r.staffing&&r.staffing.badge)r.staffing.badge.risks.forEach(x=>$('badges').append(el('div','• '+x,'mut')));
+  if(r.jd_text)$('jd').value=r.jd_text;st('Job loaded')}catch(e){st('Job error: '+e.message)}};
+
+function answers(){return [...document.querySelectorAll('#gaps textarea')].map(t=>t.value.trim()).filter(Boolean)}
+function render(r){const g=$('gaps');g.replaceChildren();const a=r.gap;
+  g.append(el('div','Required coverage: '+(a.required_coverage==null?'n/a':Math.round(a.required_coverage*100)+'%')+(a.years_requested?' · '+a.years_requested+'+ yrs requested':''),'mut'));
+  if(a.matched_required.length)g.append(el('div','Evidenced: '+a.matched_required.join(', '),'ok'));
+  if(!a.missing_required.length)g.append(el('div','No missing required skills.','ok'));
+  a.missing_required.forEach((s,i)=>{const c=el('div',null,'card');c.append(el('div',a.questions[i],'warn'));
+    const t=el('textarea');t.rows=2;t.placeholder='Real project, coursework or experience (leave blank if none)';c.append(t);g.append(c)});
+  if(a.missing_required.length){const b=el('button','Re-run with my answers');b.onclick=tailor;g.append(b)}
+  const bl=$('bullets');bl.replaceChildren();const s=r.summary;
+  bl.append(el('div',s.accepted+' accepted · '+s.rejected+' blocked by the truthfulness guard','mut'));
+  r.bullets.forEach(b=>{const c=el('div',null,'card');
+    if(b.accepted){c.append(el('del',b.original),el('br'),el('ins',b.rewritten))}
+    else{c.append(el('div',b.original));
+      if(b.violations.length){c.append(el('div','Blocked: '+b.violations.join('; '),'bad'))}
+      else c.append(el('div','No change needed','mut'))}
+    bl.append(c)})}
+async function tailor(){try{if(orig===null)orig=$('src').value;st('Tailoring (local model, may take a minute)...');
+  const r=await post('/api/tailor',{resume_latex:orig,job_description:$('jd').value,additions:answers()});
+  $('src').value=r.tex;render(r);await compile()}catch(e){st('Tailor error: '+e.message)}}
+$('tailor').onclick=tailor;
+$('revert').onclick=()=>{if(orig!==null){$('src').value=orig;orig=null;compile()}};
+$('compile').onclick=compile;
+$('dl').onclick=()=>{const a=el('a');a.href=URL.createObjectURL(new Blob([$('src').value],{type:'text/plain'}));a.download='resume.tex';a.click()};
+$('src').addEventListener('input',()=>{clearTimeout(timer);timer=setTimeout(compile,1500)});
+fetch('/static/resume.tex').then(r=>r.text()).then(x=>{$('src').value=x;compile()});
 </script></body></html>

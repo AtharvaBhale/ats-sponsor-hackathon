@@ -5,7 +5,7 @@ import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from . import jobs, jobs_store, staffing, urlsafe
+from . import jobs, jobs_store, sponsorship, staffing, urlsafe
 from .skills import parse_jd
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
@@ -65,22 +65,37 @@ def ingest(req: IngestReq):
         warnings.append("Pasted description: not verified against a live posting.")
 
     jd = parse_jd(jd_text)
-    assessment = staffing.assess(company or "Unknown", postings=[jd_text] if jd_text else [])
+    db = sponsorship.get_db()
+    prof = db.profile(company) if (db and company) else None
+    assessment = staffing.assess(company or "Unknown", naics=prof.naics if prof else None,
+                                 lca=prof.lca_stats() if prof else None,
+                                 postings=[jd_text] if jd_text else [])
     return {"source": "url" if req.url else "paste", "verification": verification,
             "title": title, "company": company, "location": location, "jd_text": jd_text,
             "jd": {"required": sorted(jd["required"]), "preferred": sorted(jd["preferred"]),
                    "years": jd["years"]},
-            "staffing": assessment.to_dict(), "warnings": warnings}
+            "staffing": assessment.to_dict(),
+            "sponsorship": sponsorship.tier_for(company, jd_text) if company else None,
+            "warnings": warnings}
 
 
 @router.get("")
 def list_jobs(live_only: bool = False, hide_staffing: bool = False,
-              direct_hire_only: bool = False, strict: bool = False):
+              direct_hire_only: bool = False, strict: bool = False, tiers: str = ""):
+    """tiers: comma-separated sponsorship tiers to keep, e.g. 'Proven Sponsor,Emerging Sponsor'."""
+    wanted = {t.strip() for t in tiers.split(",") if t.strip()}
+    db = sponsorship.get_db()
     items = []
     for row in get_store().list(live_only):
-        a = staffing.assess(row["company"] or "Unknown", postings=[row["jd_text"] or ""])
+        prof = db.profile(row["company"]) if (db and row["company"]) else None
+        a = staffing.assess(row["company"] or "Unknown", naics=prof.naics if prof else None,
+                            lca=prof.lca_stats() if prof else None,
+                            postings=[row["jd_text"] or ""])
         row["staffing"] = a.to_dict()
+        row["sponsorship"] = sponsorship.tier_for(row["company"], row["jd_text"] or "")
         row.pop("jd_text", None)
+        if wanted and row["sponsorship"]["tier"] not in wanted:
+            continue
         items.append({"row": row, "assessment": a})
     kept = staffing.filter_companies(items, hide_staffing, direct_hire_only, strict)
     return [i["row"] for i in kept]
