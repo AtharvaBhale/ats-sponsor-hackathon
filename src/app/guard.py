@@ -62,3 +62,8 @@ def check(rewritten: str, evidence: str) -> GuardResult:
         v.append(f"new proper noun not in evidence: {tok}")
 
     return GuardResult(ok=not v, violations=sorted(set(v)))
+
+
+def facts(text: str) -> set:
+    """Skills and numbers a bullet claims. A rewrite must not silently drop any of them."""
+    return extract_skills(text) | _nums(text)

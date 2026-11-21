@@ -165,3 +165,19 @@ def test_tailor_processes_macro_resume():
     assert r["summary"]["bullets"] == 3 and r["bullets"][1]["accepted"]
     assert r"\resumeItem{Mentored a team of 3 developers across two projects with nested braces intact using Python.}" in r["tex"]
     assert r["tex"].count("\\resumeItem{") == 2
+
+
+def test_rewrite_that_drops_a_skill_is_blocked_even_if_it_adds_a_keyword():
+    # the real bad case: "REST API" deleted, a weaker verb swapped in, a different keyword added
+    r = run(tailor.tailor(TEX, JD, None, fake_outputs(
+        "Interned in the development of an internal inventory tool with coverage reports.", "Wrote unit tests.")))
+    b = r["bullets"][0]
+    assert not b["accepted"] and b["violations"] == ["drops from the original: rest"]
+    assert r["tex"] == TEX
+
+
+def test_rewrite_that_drops_a_number_is_blocked():
+    async def fn(bullet, allowed):
+        return "Built ETL pipelines in Python and Docker." if "ETL" in bullet else bullet
+    r = run(tailor.tailor(JAKE, "Requirements\nPython, Docker", ["Course project: used Docker."], fn))
+    assert any("40" in v for v in r["bullets"][0]["violations"])

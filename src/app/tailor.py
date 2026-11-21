@@ -48,6 +48,10 @@ async def tailor(resume_tex: str, jd: str, additions: list | None = None,
             row["violations"] = ["rewrite is much longer than the original"]
         else:
             row["violations"] = guard.check(cand, evidence).violations
+        if not row["violations"]:
+            lost = guard.facts(original) - guard.facts(cand)
+            if lost:
+                row["violations"] = ["drops from the original: " + ", ".join(sorted(lost))]
         if row["violations"]:
             continue
         added = kw.gained(original, cand, allowed_stems)
