@@ -76,3 +76,49 @@ def test_api_ok_and_validation(monkeypatch):
     ok = c.post("/api/tailor", json={"resume_latex": TEX, "job_description": JD}).json()
     assert ok["summary"]["bullets"] == 2 and "tex" in ok
     assert c.post("/api/tailor", json={"resume_latex": "", "job_description": JD}).status_code == 400
+
+
+JAKE = r"""\documentclass{article}
+\newcommand{\resumeItem}[1]{\item\small{#1 \vspace{-2pt}}}
+\newcommand{\bullet2}[1]{\item #1}
+\newcommand{\resumeSubheading}[2]{\vspace{-2pt}\item
+  \textbf{#1} & #2 \\}
+\begin{document}
+\section{Experience}
+\resumeSubheading{Data Scientist}{Apr 2026 -- Present}
+\begin{itemize}
+  \resumeItem{Built ETL pipelines in Python, cutting runtime by \textbf{40\%}.}
+  \resumeItem{Mentored a team of 3 developers across
+    two projects with {nested braces} intact.}
+  \item Plain item still works.
+\end{itemize}
+\end{document}
+"""
+
+
+def test_macro_bullets_found_in_body_only():
+    b = lr.extract_bullets(JAKE)
+    texts = [lr.latex_to_text(x[2], collapse=True) for x in b]
+    assert texts == ["Built ETL pipelines in Python, cutting runtime by 40%.",
+                     "Mentored a team of 3 developers across two projects with nested braces intact.",
+                     "Plain item still works."]
+
+
+def test_macro_bullet_replacement_keeps_everything_else():
+    out = lr.replace_bullets(JAKE, {0: "Built Python ETL pipelines & cut runtime by 40%."})
+    assert r"\resumeItem{Built Python ETL pipelines \& cut runtime by 40\%.}" in out
+    assert r"\newcommand{\resumeItem}[1]{\item\small{#1 \vspace{-2pt}}}" in out
+    assert out.count(r"\resumeItem{") == 2 and "nested braces" in out
+
+
+def test_custom_macro_defined_with_newcommand_is_detected():
+    assert "bullet2" in lr.bullet_macros(JAKE) and "resumeItem" in lr.bullet_macros(JAKE)
+
+
+def test_tailor_processes_macro_resume():
+    async def fake(bullet, allowed):
+        return bullet.replace("Built", "Developed")
+    r = run(tailor.tailor(JAKE, "Requirements\nPython", None, fake))
+    assert r["summary"]["bullets"] == 3 and r["bullets"][0]["accepted"]
+    assert r"\resumeItem{Developed ETL pipelines in Python" in r["tex"]
+    assert r["tex"].count("\\resumeItem{") == 2

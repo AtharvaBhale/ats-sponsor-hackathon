@@ -20,7 +20,7 @@ iframe{width:100%;height:100%;border:0}#st{color:var(--mut);font-size:12px}
 </style></head><body>
 <header><strong>ATS Resume Tailor</strong>
 <button id="tailor" class="p">Tailor resume</button><button id="revert">Revert</button>
-<button id="up">Upload resume</button><input type="file" id="resfile" hidden accept=".pdf,.docx,.txt,.md,.tex"><button id="compile">Compile</button><select id="fmt"><option value="pdf">PDF</option><option value="txt">Plain text</option><option value="md">Markdown</option><option value="tex">LaTeX</option></select><button id="exp">Export</button><span id="st"></span></header>
+<button id="up">Upload resume</button><input type="file" id="resfile" hidden accept=".pdf,.docx,.txt,.md,.tex"><button id="compile">Compile</button><select id="fmt"><option value="pdf">PDF</option><option value="txt">Plain text</option><option value="md">Markdown</option><option value="tex">LaTeX</option></select><button id="exp" class="p">Download</button><span id="st"></span></header>
 <main>
 <section>
   <h3>1. Job</h3>
@@ -28,6 +28,7 @@ iframe{width:100%;height:100%;border:0}#st{color:var(--mut);font-size:12px}
   <button id="fetch" style="margin:6px 0">Fetch &amp; verify</button>
   <div id="badges"></div>
   <textarea id="jd" rows="7" placeholder="Job description text"></textarea>
+  <div class="mut" style="font-size:12px">After pasting a job description, click <b>Tailor resume</b> (top left) to run the local model. Fetch &amp; verify only checks a job URL.</div>
   <h3>Evidence (transcripts, certificates)</h3>
   <button id="evbtn">Upload document</button><input type="file" id="evfile" hidden accept=".pdf,.docx,.txt,.md">
   <textarea id="ev" rows="4" placeholder="Facts you can vouch for, one per line. Uploads are screened for relevance; IDs are dropped."></textarea>
@@ -71,6 +72,7 @@ function render(r){const g=$('gaps');g.replaceChildren();const a=r.gap;
     const t=el('textarea');t.rows=2;t.placeholder='Real project, coursework or experience (leave blank if none)';c.append(t);const d=el('button','Draft bullet from this');const out=el('div');d.onclick=()=>draft(t.value,s,out);c.append(d,out);g.append(c)});
   if(a.missing_required.length){const b=el('button','Re-run with my answers');b.onclick=tailor;g.append(b)}
   const bl=$('bullets');bl.replaceChildren();const s=r.summary;
+  if(!s.bullets)bl.append(el('div','No bullets recognized. Bullets must be \\item lines or a macro like \\resumeItem{...}.','bad'));
   bl.append(el('div',s.accepted+' accepted · '+s.rejected+' blocked by the truthfulness guard','mut'));
   r.bullets.forEach(b=>{const c=el('div',null,'card');
     if(b.accepted){c.append(el('del',b.original),el('br'),el('ins',b.rewritten))}

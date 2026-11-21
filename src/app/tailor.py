@@ -22,14 +22,14 @@ async def default_rewrite(bullet: str, allowed: list) -> str:
 
 
 async def tailor(resume_tex: str, jd: str, additions: list | None = None,
-                 rewrite_fn=default_rewrite, max_bullets: int = 12) -> dict:
+                 rewrite_fn=default_rewrite, max_bullets: int = 30) -> dict:
     additions = [a.strip() for a in (additions or []) if a.strip()]
-    evidence = lr.latex_to_text(resume_tex) + "\n" + "\n".join(additions)
+    evidence = lr.latex_to_text(lr.body_text(resume_tex)) + "\n" + "\n".join(additions)
     analysis = gap.analyze(evidence, jd)
     allowed = sorted(extract_skills(jd) & extract_skills(evidence))
     accepted, results = {}, []
     for i, (_, _, raw) in enumerate(lr.extract_bullets(resume_tex)[:max_bullets]):
-        original = lr.latex_to_text(raw)
+        original = lr.latex_to_text(raw, collapse=True)
         cand = await rewrite_fn(original, allowed)
         reasons = []
         if not cand:
