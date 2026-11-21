@@ -89,3 +89,21 @@ def test_lca_without_status_warns(tmp_path):
     write_csv(p, ["EMPLOYER_NAME"], [["Acme Inc"]])
     s = sponsor_data.build(tmp_path / "s.db", [], [(2026, p)])
     assert any("CASE_STATUS" in w for w in s["warnings"])
+
+
+REAL_HEADER = ('"Fiscal Year",Employer,"Initial Approval","Initial Denial","Continuing Approval",'
+               '"Continuing Denial",NAICS,"Tax ID",State,City,ZIP')
+
+
+def test_real_uscis_header_format_builds_correctly(tmp_path):
+    """Header copied from an actual USCIS Employer Data Hub export (mixed quoted/unquoted)."""
+    rows = ['2024,"NORTHWIND ANALYTICS, INC.",12,1,30,2,54,1234,WA,SEATTLE,98101',
+            '2024,"NORTHWIND ANALYTICS, INC.","1,000",0,0,0,54,9999,WA,TACOMA,98402',
+            '2023,CONTOSO ROBOTICS LLC,3,0,0,0,33,5555,TX,AUSTIN,73301']
+    p = tmp_path / "h1b_datahubexport-2024.csv"
+    p.write_text(REAL_HEADER + "\n" + "\n".join(rows) + "\n", encoding="utf-8")
+    s = sponsor_data.build(tmp_path / "s.db", [(None, p)])
+    db = sqlite3.connect(tmp_path / "s.db")
+    assert db.execute("SELECT ia,id,ca,cd FROM uscis WHERE norm='northwind analytics' AND fy=2024"
+                      ).fetchone() == (1012, 1, 30, 2)
+    assert s["uscis_fys"] == "2023,2024" and not s["warnings"]
