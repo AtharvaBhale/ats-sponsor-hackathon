@@ -64,21 +64,27 @@ $('fetch').onclick=async()=>{try{st('Verifying...');$('badges').replaceChildren(
   if(r.jd_text)$('jd').value=r.jd_text;st('Job loaded')}catch(e){st('Job error: '+e.message)}};
 
 function answers(){return [...document.querySelectorAll('#gaps textarea'),$('ev')].flatMap(t=>t.value.split('\n')).map(x=>x.trim()).filter(Boolean)}
-function render(r){const g=$('gaps');g.replaceChildren();const a=r.gap;
-  g.append(el('div','Required coverage: '+(a.required_coverage==null?'n/a':Math.round(a.required_coverage*100)+'%')+(a.years_requested?' · '+a.years_requested+'+ yrs requested':''),'mut'));
-  if(a.matched_required.length)g.append(el('div','Evidenced: '+a.matched_required.join(', '),'ok'));
-  if(!a.missing_required.length)g.append(el('div','No missing required skills.','ok'));
+function render(r){const g=$('gaps');g.replaceChildren();const a=r.gap,f=r.fit;
+  if(f&&f.score!=null){const cls=f.level==='strong'?'ok':f.level==='partial'?'warn':'bad';
+    g.append(el('div','Keyword match with this job: '+Math.round(f.score*100)+'% ('+f.level+')',cls));
+    if(f.level==='weak')g.append(el('div',"Weak match: most of this job's key terms do not appear in your resume. Tailoring cannot create experience you do not have.",'bad'));
+    if(f.missing.length)g.append(el('div','Not in your resume: '+f.missing.join(', '),'mut'))}
+  if(a.required_coverage==null){g.append(el('div','No technical skills from our tech-focused skill list were found in this job description, so skill-by-skill gaps cannot be computed.','warn'))}
+  else{g.append(el('div','Required skill coverage: '+Math.round(a.required_coverage*100)+'%'+(a.years_requested?' \u00b7 '+a.years_requested+'+ yrs requested':''),'mut'));
+    if(a.matched_required.length)g.append(el('div','Evidenced: '+a.matched_required.join(', '),'ok'));
+    if(!a.missing_required.length)g.append(el('div','No missing required skills.','ok'))}
   a.missing_required.forEach((s,i)=>{const c=el('div',null,'card');c.append(el('div',a.questions[i],'warn'));
     const t=el('textarea');t.rows=2;t.placeholder='Real project, coursework or experience (leave blank if none)';c.append(t);const d=el('button','Draft bullet from this');const out=el('div');d.onclick=()=>draft(t.value,s,out);c.append(d,out);g.append(c)});
   if(a.missing_required.length){const b=el('button','Re-run with my answers');b.onclick=tailor;g.append(b)}
   const bl=$('bullets');bl.replaceChildren();const s=r.summary;
   if(!s.bullets)bl.append(el('div','No bullets recognized. Bullets must be \\item lines or a macro like \\resumeItem{...}.','bad'));
+  if(s.skipped_reason)bl.append(el('div',s.skipped_reason,'warn'));
   bl.append(el('div',s.accepted+' accepted · '+s.rejected+' blocked by the truthfulness guard','mut'));
   r.bullets.forEach(b=>{const c=el('div',null,'card');
-    if(b.accepted){c.append(el('del',b.original),el('br'),el('ins',b.rewritten))}
+    if(b.accepted){c.append(el('del',b.original),el('br'),el('ins',b.rewritten),el('div','Added keywords: '+b.gained.join(', '),'mut'))}
     else{c.append(el('div',b.original));
       if(b.violations.length){c.append(el('div','Blocked: '+b.violations.join('; '),'bad'))}
-      else c.append(el('div','No change needed','mut'))}
+      else c.append(el('div',b.note||'Original kept.','mut'))}
     bl.append(c)})}
 async function tailor(){try{if(orig===null)orig=$('src').value;st('Tailoring (local model, may take a minute)...');
   const r=await post('/api/tailor',{resume_latex:orig,job_description:$('jd').value,additions:answers()});

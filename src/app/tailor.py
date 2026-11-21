@@ -1,7 +1,7 @@
 """Tailor a LaTeX resume to a job: gap analysis + guarded bullet rewrites."""
 import re
 
-from . import gap, guard, latex_resume as lr, llm
+from . import gap, guard, keywords as kw, latex_resume as lr, llm
 from .skills import extract_skills
 
 SYSTEM = ("You rewrite ONE resume bullet for ATS keyword fit. Use only facts in the input "
@@ -26,25 +26,40 @@ async def tailor(resume_tex: str, jd: str, additions: list | None = None,
     additions = [a.strip() for a in (additions or []) if a.strip()]
     evidence = lr.latex_to_text(lr.body_text(resume_tex)) + "\n" + "\n".join(additions)
     analysis = gap.analyze(evidence, jd)
-    allowed = sorted(extract_skills(jd) & extract_skills(evidence))
-    accepted, results = {}, []
-    for i, (_, _, raw) in enumerate(lr.extract_bullets(resume_tex)[:max_bullets]):
+    match = kw.fit(jd, evidence)
+    allowed_stems = set(match["matched_stems"])
+    allowed = match["matched"][:12]
+    bullets = lr.extract_bullets(resume_tex)[:max_bullets]
+    accepted, results, skipped = {}, [], None
+    if not allowed_stems:
+        skipped = ("None of this job's key terms appear in your resume, so there is nothing "
+                   "truthful to add. No bullets were changed.")
+    for i, (_, _, raw) in enumerate(bullets):
         original = lr.latex_to_text(raw, collapse=True)
+        row = {"index": i, "original": original, "rewritten": original, "accepted": False,
+               "violations": [], "note": "", "gained": []}
+        results.append(row)
+        if skipped:
+            continue
         cand = await rewrite_fn(original, allowed)
-        reasons = []
         if not cand:
-            reasons.append("empty rewrite")
+            row["violations"] = ["empty rewrite"]
         elif len(cand) > 2.2 * len(original) + 20:
-            reasons.append("rewrite is much longer than the original")
-        if cand and not reasons:
-            reasons = guard.check(cand, evidence).violations
-        ok = bool(cand) and not reasons and cand != original
-        if ok:
+            row["violations"] = ["rewrite is much longer than the original"]
+        else:
+            row["violations"] = guard.check(cand, evidence).violations
+        if row["violations"]:
+            continue
+        added = kw.gained(original, cand, allowed_stems)
+        if cand == original:
+            row["note"] = "Model returned the bullet unchanged. Original kept."
+        elif not added:
+            row["note"] = "No new job keyword added, so the original was kept."
+        else:
+            row.update(accepted=True, rewritten=cand, gained=added)
             accepted[i] = cand
-        results.append({"index": i, "original": original, "rewritten": cand if ok else original,
-                        "accepted": ok, "violations": reasons,
-                        "unchanged": bool(cand) and not reasons and cand == original})
-    return {"tex": lr.replace_bullets(resume_tex, accepted), "gap": analysis, "bullets": results,
+    return {"tex": lr.replace_bullets(resume_tex, accepted), "gap": analysis, "fit": match,
+            "bullets": results,
             "summary": {"bullets": len(results), "accepted": len(accepted),
                         "rejected": sum(1 for r in results if r["violations"]),
-                        "keywords_allowed": allowed}}
+                        "keywords_allowed": allowed, "skipped_reason": skipped}}
